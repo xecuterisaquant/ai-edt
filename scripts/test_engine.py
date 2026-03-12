@@ -44,5 +44,8 @@ def run_integrated_analysis(headline):
     print(f"\n✅ SIGNAL DETECTED:\n{response['response']}")
 
 # --- TEST IT ---
-run_integrated_analysis("Saudi Arabia maintains steady oil production for April") # Should skip
+run_integrated_analysis("US grants Chevron expanded license to export Venezuelan heavy crude to US refineries") # Should trigger
+run_integrated_analysis("Oil prices remain stable as market waits for next week's inventory report") # Should skip
 run_integrated_analysis("US imposes new sanctions on Iranian tanker fleet") # Should trigger
+run_integrated_analysis("Saudi Arabia maintains steady oil production for April") # Should skip
+run_integrated_analysis("Escalating conflict in the Middle East forces ships to re-route around the Cape of Good Hope") # Should trigger
