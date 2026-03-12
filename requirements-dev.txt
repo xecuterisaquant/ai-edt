@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Testing (mocked — no GPU required)
+pytest>=7.0.0

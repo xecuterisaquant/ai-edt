@@ -1,4 +1,30 @@
-venv/
 __pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables (never commit secrets)
 .env
-market_knowledge.json
+
+# Runtime output (kept in repo via .gitkeep, contents ignored)
+logs/*.log
+signals/*.jsonl
+
+# IDE
+.vscode/
+.idea/
+
+# Build / distribution
+*.egg-info/
+dist/
+build/
+
+# pytest cache
+.pytest_cache/
+
+data/

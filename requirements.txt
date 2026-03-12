@@ -1,17 +1,11 @@
-# Core ML & Sieve (FinBERT)
-transformers>=4.50.0
-torch>=2.4.0
-sentencepiece
-
-# Local Reasoning Engine (Ollama Bridge)
+# HTTP client for Ollama API
 requests>=2.31.0
 
-# News Automation
+# RSS feed polling
 feedparser>=6.0.11
 
-# The Knowledge Base (Local Vector DB)
-chromadb>=0.6.0
+# YAML config loading
+pyyaml>=6.0
 
-# Utilities
-pandas
-python-dotenv
+# Environment variable support (.env files)
+python-dotenv>=1.0.0

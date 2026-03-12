@@ -1,0 +1,24 @@
+# AI-EDT runtime settings
+#
+# Hardware context: NVIDIA RTX 3050 (4 GB VRAM), 16 GB RAM.
+# Both models use keep_alive: 0 to unload after inference, preventing VRAM
+# collisions between the 1B sieve and 8B reasoning engine.
+
+ollama:
+  host: "http://localhost:11434"
+
+models:
+  sieve: "llama3.2:1b"
+  reasoning: "deepseek-r1:8b"
+
+timeouts:
+  sieve: 30        # 1B model is fast; 30s detects failures without masking slowness
+  reasoning: 200   # 8B on 4 GB VRAM; raised to 200s to handle thermal throttling after consecutive calls
+
+watcher:
+  poll_interval: 120  # Seconds between RSS feed polls
+
+paths:
+  knowledge_base: "data/market_knowledge.json"
+  signal_log: "signals/signals.jsonl"
+  log_file: "logs/ai_edt.log"

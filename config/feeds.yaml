@@ -1,0 +1,17 @@
+# RSS feed configuration for AI-EDT Watcher
+#
+# Add or remove feeds here. No code changes needed.
+# Each feed must have a `name` (for logging) and a `url`.
+
+feeds:
+  - name: Reuters Energy
+    url: "https://www.reuters.com/arc/outboundfeeds/rss/topics/energy/"
+
+  - name: CNBC Energy
+    url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839135"
+
+  - name: Hellenic Shipping News
+    url: "https://www.hellenicshippingnews.com/category/shipping-news/tankers/feed/"
+
+  - name: Oil & Gas Journal
+    url: "https://www.ogj.com/rss/general-interest"

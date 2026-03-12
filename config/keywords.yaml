@@ -1,0 +1,84 @@
+# Keyword tiers for AI-EDT Stage 1 + Stage 2 filter
+#
+# Architecture:
+#   Stage 1 checks all three tiers before any LLM call.
+#   1. no_pass  → deterministic BLOCK  (corporate governance, analyst commentary)
+#   2. high_alpha → deterministic PASS  (VIP bypass, straight to Stage 3)
+#   3. general  → Stage 2 LLM sieve    (ambiguous — let the 1B model decide)
+#
+# Evaluation order: no_pass checked FIRST so it can silence a general keyword match.
+#
+# To add a keyword: edit this file and restart the pipeline. No code changes needed.
+
+no_pass:
+  # Corporate governance — never a supply-chain event
+  - ceo resigns
+  - cfo resigns
+  - coo resigns
+  - board appoints
+  - board elects
+  - executive appoints
+  - management changes
+  - pay deal
+  - pay rise
+  - pay cut
+  - workers vote
+  - workers accept
+  - union accepts
+  - union rejects
+  - union votes
+  # Analyst commentary and market forecasts — not actionable events
+  - analysts forecast
+  - analysts expect
+  - analysts predict
+  - forecast stable
+  - prices to remain
+  - prices expected
+  - outlook unchanged
+  - market stable
+  - supply balanced
+
+high_alpha:
+  # Geopolitical supply chokepoints
+  - venezuela
+  - sanction
+  - hormuz
+  - suez
+  - heavy crude
+  - iran
+  - houthi
+  - red sea
+  - opec
+  - malacca
+  - yemen
+  - cape of good hope
+  # Supply disruptions — always trade-relevant, no LLM judgment needed
+  - explosion
+  - exploded
+  - fire at
+  - refinery fire
+  - outage
+  - unplanned shutdown
+  - force majeure
+  - blast
+  - pipeline rupture
+  - pipeline leak
+  # Shipping rate events — explicit market data always worth analysing
+  - vlcc
+  - aframax
+  - suezmax
+  - day rate
+  - freight rate
+  - spot rate
+  - tanker rate
+  - shipping rate
+
+general:
+  - oil
+  - tanker
+  - refinery
+  - bpd
+  - fleet
+  - vessel
+  - fleet
+  - vessel
