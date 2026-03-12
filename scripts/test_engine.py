@@ -2,7 +2,7 @@ import json
 import requests
 from transformers import pipeline
 
-# 1. Initialize the Sieve (Runs on CPU/RAM - 110M parameters)
+# 1. Initialize the Sieve (Runs on CPU/RAM)
 print("🚀 Loading FinBERT Sieve...")
 sieve = pipeline("sentiment-analysis", model="ProsusAI/finbert")
 
@@ -15,17 +15,21 @@ def run_integrated_analysis(headline):
     print(f"\n📰 Headline: {headline}")
     print(f"📊 Sieve Result: {label} ({score:.2f})")
 
-    # If the news is neutral, don't waste 14B reasoning time
-    if label == "neutral" and score > 0.5:
-        print("⏭️ Skipping... No significant market-moving sentiment detected.")
+    # HARDENED LOGIC: Only proceed if it's a strong market move
+    if label == "neutral" or score < 0.75:
+        print(f"⏭️ Skipping... Signal too weak ({score:.2f}) or Neutral.")
         return
 
-    # 3. Step 2: Deep Reasoning (The 14B Model)
-    print("🧠 Sentiment confirmed. Triggering 14B Reasoning Engine...")
+    # 3. Step 2: Deep Reasoning (Optimized 8B Model)
+    print("🧠 High-Alpha detected. Triggering 8B Reasoning Engine...")
     
     url = "http://localhost:11434/api/generate"
-    with open('market_knowledge.json', 'r') as f:
-        knowledge = json.load(f)
+    try:
+        with open('market_knowledge.json', 'r') as f:
+            knowledge = json.load(f)
+    except FileNotFoundError:
+        print("❌ Error: market_knowledge.json not found!")
+        return
 
     prompt = f"""
     ### KNOWLEDGE BASE
@@ -35,17 +39,25 @@ def run_integrated_analysis(headline):
     "{headline}"
 
     ### TASK
-    Based on the {label} sentiment, find the 2nd-order winner. 
-    Explain the logistical or technical link.
+    Perform a 2nd-order analysis. Identify the winner from the KNOWLEDGE BASE.
+    Output Format:
+    - Ticker: 
+    - Signal: (LONG/SHORT)
+    - Confidence: (0-100%)
+    - Rationale: (Max 2 sentences)
     """
 
-    payload = {"model": "deepseek-r1:14b", "prompt": prompt, "stream": False}
-    response = requests.post(url, json=payload).json()
-    print(f"\n✅ SIGNAL DETECTED:\n{response['response']}")
+    # Switch to 8B for VRAM efficiency
+    payload = {"model": "deepseek-r1:8b", "prompt": prompt, "stream": False}
+    
+    try:
+        response = requests.post(url, json=payload, timeout=60)
+        print(f"\n✅ SIGNAL DETECTED:\n{response.json()['response']}")
+    except Exception as e:
+        print(f"❌ Ollama Error: {e}")
 
-# --- TEST IT ---
-run_integrated_analysis("US grants Chevron expanded license to export Venezuelan heavy crude to US refineries") # Should trigger
-run_integrated_analysis("Oil prices remain stable as market waits for next week's inventory report") # Should skip
-run_integrated_analysis("US imposes new sanctions on Iranian tanker fleet") # Should trigger
-run_integrated_analysis("Saudi Arabia maintains steady oil production for April") # Should skip
-run_integrated_analysis("Escalating conflict in the Middle East forces ships to re-route around the Cape of Good Hope") # Should trigger
+# --- TEST SUITE ---
+if __name__ == "__main__":
+    run_integrated_analysis("US grants Chevron expanded license for Venezuelan heavy crude") # Trigger
+    run_integrated_analysis("Oil prices flat in quiet Tuesday trading") # Skip
+    run_integrated_analysis("New sanctions hit Iranian tanker fleet amid rising tensions") # Trigger
