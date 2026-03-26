@@ -99,6 +99,9 @@ class _Config:
 
         # Resolved file paths
         self.knowledge_base_path: Path = PROJECT_ROOT / settings["paths"]["knowledge_base"]
+        self.macro_context_path: Path = PROJECT_ROOT / settings["paths"].get(
+            "macro_context", "data/macro_context.json"
+        )
         self.signal_log_path: Path = PROJECT_ROOT / settings["paths"]["signal_log"]
         self.db_path: Path = PROJECT_ROOT / settings["paths"].get("signal_db", "signals/signals.db")
         self.log_file_path: Path = PROJECT_ROOT / settings["paths"]["log_file"]

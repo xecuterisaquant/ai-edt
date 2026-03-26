@@ -334,17 +334,22 @@ def analyze(headline: str, feed_source: str = "") -> Signal | None:
     logger.info("S3 START | Triggering reasoning engine | %s", headline)
 
     try:
+        with cfg.macro_context_path.open("r", encoding="utf-8") as f:
+            macro_context = json.load(f)
+    except FileNotFoundError:
+        logger.warning(
+            "Macro context not found at %s — using empty context", cfg.macro_context_path
+        )
+        macro_context = {}
+
+    try:
         with cfg.knowledge_base_path.open("r", encoding="utf-8") as f:
             knowledge = json.load(f)
     except FileNotFoundError:
         logger.error("Knowledge base not found at %s", cfg.knowledge_base_path)
         return None
 
-    macro_context = knowledge.get("macro_context", {})
-    filtered_knowledge = _select_relevant_kb(
-        headline_lower,
-        {k: v for k, v in knowledge.items() if k != "macro_context"},
-    )
+    filtered_knowledge = _select_relevant_kb(headline_lower, knowledge)
 
     reasoning_prompt = _REASONING_PROMPT.format(
         date=datetime.now().strftime("%B %Y"),

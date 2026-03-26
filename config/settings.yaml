@@ -34,6 +34,7 @@ signals:
 
 paths:
   knowledge_base: "data/market_knowledge.json"
+  macro_context: "data/macro_context.json"
   signal_log: "signals/signals.jsonl"
   signal_db: "signals/signals.db"
   log_file: "logs/ai_edt.log"

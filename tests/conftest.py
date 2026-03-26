@@ -43,6 +43,17 @@ GENERAL_KEYWORD_HEADLINES = [
 # Sample knowledge base
 # ---------------------------------------------------------------------------
 
+SAMPLE_MACRO_CONTEXT = {
+    "date": "March 2026",
+    "situations": [
+        {
+            "theme": "Middle East Tension",
+            "detail": "Military escalation has raised transit risk through the Strait of Hormuz.",
+            "physical_effect": "VLCC spot day rates elevated.",
+        }
+    ],
+}
+
 SAMPLE_KNOWLEDGE = {
     "upstream_data": [
         {
@@ -134,6 +145,9 @@ def make_mock_config(tmp_path: Path) -> MagicMock:
     kb_path = tmp_path / "market_knowledge.json"
     kb_path.write_text(json.dumps(SAMPLE_KNOWLEDGE), encoding="utf-8")
 
+    macro_path = tmp_path / "macro_context.json"
+    macro_path.write_text(json.dumps(SAMPLE_MACRO_CONTEXT), encoding="utf-8")
+
     cfg = MagicMock(spec=_Config)
     cfg.no_pass_keywords = [
         "ceo resigns",
@@ -163,6 +177,7 @@ def make_mock_config(tmp_path: Path) -> MagicMock:
     cfg.sieve_timeout = 30
     cfg.reasoning_timeout = 120
     cfg.knowledge_base_path = kb_path
+    cfg.macro_context_path = macro_path
     cfg.signal_log_path = tmp_path / "signals.jsonl"
     cfg.db_path = tmp_path / "signals.db"
     cfg.min_confidence = 0  # tests log all signals regardless of confidence
