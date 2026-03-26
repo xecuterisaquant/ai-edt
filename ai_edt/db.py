@@ -324,3 +324,60 @@ def flag_signal(signal_id: int, flag: str, note: str = "") -> None:
         (signal_id, flag, note),
     )
     get_db().commit()
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Outcome tracking
+# ---------------------------------------------------------------------------
+
+
+def update_signal_prices(signal_id: int, prices: dict) -> None:
+    """Write price and outcome columns for *signal_id*.
+
+    *prices* is the dict returned by ``outcomes.fetch_prices_for_signal``.
+    Columns that are ``None`` in *prices* will overwrite existing values —
+    call this only when you have the latest fetch result.
+    """
+    get_db().execute(
+        """UPDATE signals
+               SET price_at_signal = :price_at_signal,
+                   price_1h        = :price_1h,
+                   price_4h        = :price_4h,
+                   price_24h       = :price_24h,
+                   outcome_pnl_1h  = :outcome_pnl_1h,
+                   outcome_pnl_24h = :outcome_pnl_24h,
+                   outcome_note    = :outcome_note
+           WHERE id = :id""",
+        {**prices, "id": signal_id},
+    )
+    get_db().commit()
+
+
+def get_signals_needing_outcomes(
+    min_age_minutes: int = 30,
+    max_age_days: int = 7,
+) -> list[dict]:
+    """Return signals with incomplete outcome data in the fetchable age window.
+
+    Only returns signals where at least one price column is NULL, the signal
+    is old enough for ``price_at_signal`` to be available (*min_age_minutes*),
+    and not so old that 1h bars are unlikely to exist (*max_age_days*).
+    """
+    cutoff_min = (datetime.now(UTC) - timedelta(minutes=min_age_minutes)).isoformat()
+    cutoff_max = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()
+    rows = (
+        get_db()
+        .execute(
+            """SELECT * FROM signals
+               WHERE (price_at_signal IS NULL
+                      OR price_1h IS NULL
+                      OR price_4h IS NULL
+                      OR price_24h IS NULL)
+                 AND created_utc <= :min_cutoff
+                 AND created_utc >= :max_cutoff
+               ORDER BY created_utc DESC""",
+            {"min_cutoff": cutoff_min, "max_cutoff": cutoff_max},
+        )
+        .fetchall()
+    )
+    return [dict(row) for row in rows]

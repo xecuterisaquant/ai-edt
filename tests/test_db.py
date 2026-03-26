@@ -284,3 +284,116 @@ class TestFlagSignal:
 
         with pytest.raises(sqlite3.IntegrityError):
             db_mod.flag_signal(row_id, "made_up_flag")
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Outcome price tracking
+# ---------------------------------------------------------------------------
+
+
+class TestOutcomeOperations:
+    def test_update_signal_prices_fills_columns(self, test_db: sqlite3.Connection) -> None:
+        """update_signal_prices must persist all price and PnL columns."""
+        signal = Signal(
+            headline="Iran sanctions hit VLCC fleet",
+            ticker="FRO",
+            direction="LONG",
+            confidence=88,
+            rationale="Supply reduction boosts rates.",
+        )
+        row_id = db_mod.insert_signal(signal)
+
+        prices = {
+            "price_at_signal": 15.50,
+            "price_1h": 15.75,
+            "price_4h": 16.00,
+            "price_24h": 16.80,
+            "outcome_pnl_1h": 0.016129,
+            "outcome_pnl_24h": 0.083871,
+            "outcome_note": None,
+        }
+        db_mod.update_signal_prices(row_id, prices)
+
+        row = db_mod.get_signal_by_id(row_id)
+        assert row is not None
+        assert row["price_at_signal"] == pytest.approx(15.50)
+        assert row["price_1h"] == pytest.approx(15.75)
+        assert row["price_4h"] == pytest.approx(16.00)
+        assert row["price_24h"] == pytest.approx(16.80)
+        assert row["outcome_pnl_1h"] == pytest.approx(0.016129)
+        assert row["outcome_pnl_24h"] == pytest.approx(0.083871)
+        assert row["outcome_note"] is None
+
+    def test_get_signals_needing_outcomes_excludes_recent(
+        self, test_db: sqlite3.Connection
+    ) -> None:
+        """Signals < min_age_minutes old must be excluded."""
+        db_mod.insert_signal(
+            Signal(headline="new", ticker="FRO", direction="LONG", confidence=80, rationale="r")
+        )  # timestamp defaults to now
+        rows = db_mod.get_signals_needing_outcomes(min_age_minutes=30)
+        assert rows == []
+
+    def test_get_signals_needing_outcomes_includes_old(self, test_db: sqlite3.Connection) -> None:
+        """A signal 2h old with no prices must be returned."""
+        old_ts = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+        signal = Signal(
+            headline="old signal",
+            ticker="FRO",
+            direction="LONG",
+            confidence=80,
+            rationale="r",
+            timestamp=old_ts,
+        )
+        row_id = db_mod.insert_signal(signal)
+
+        rows = db_mod.get_signals_needing_outcomes(min_age_minutes=30)
+        assert len(rows) == 1
+        assert rows[0]["id"] == row_id
+
+    def test_get_signals_needing_outcomes_excludes_fully_filled(
+        self, test_db: sqlite3.Connection
+    ) -> None:
+        """Signals with all four price columns filled must not be returned."""
+        old_ts = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
+        signal = Signal(
+            headline="filled signal",
+            ticker="FRO",
+            direction="LONG",
+            confidence=80,
+            rationale="r",
+            timestamp=old_ts,
+        )
+        row_id = db_mod.insert_signal(signal)
+        db_mod.update_signal_prices(
+            row_id,
+            {
+                "price_at_signal": 15.0,
+                "price_1h": 15.5,
+                "price_4h": 16.0,
+                "price_24h": 16.5,
+                "outcome_pnl_1h": 0.033,
+                "outcome_pnl_24h": 0.1,
+                "outcome_note": None,
+            },
+        )
+        rows = db_mod.get_signals_needing_outcomes(min_age_minutes=30)
+        assert rows == []
+
+    def test_get_signals_needing_outcomes_excludes_too_old(
+        self, test_db: sqlite3.Connection
+    ) -> None:
+        """Signals beyond max_age_days must be excluded."""
+        very_old_ts = (datetime.now(UTC) - timedelta(days=10)).isoformat()
+        db_mod.insert_signal(
+            Signal(
+                headline="very old",
+                ticker="FRO",
+                direction="LONG",
+                confidence=80,
+                rationale="r",
+                timestamp=very_old_ts,
+            )
+        )
+        rows = db_mod.get_signals_needing_outcomes(min_age_minutes=30, max_age_days=7)
+        assert rows == []
