@@ -4,9 +4,10 @@ Provides a get_logger() factory that attaches two handlers to the root
 "ai_edt" logger (once, on first call):
 
   - StreamHandler  — INFO+ to console in a human-readable format
-  - RotatingFileHandler — DEBUG+ to logs/ai_edt.log (5 MB, 3 backups)
+  - RotatingFileHandler — DEBUG+ to ``paths.log_file`` (5 MB, 3 backups)
 
-Path is resolved from __file__, so it works regardless of cwd.
+The log file path is read from ``config/settings.yaml`` so it stays in
+sync with the rest of the config system.
 """
 
 from __future__ import annotations
@@ -14,9 +15,26 @@ from __future__ import annotations
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 _PROJECT_ROOT = Path(__file__).parent.parent
-_LOG_FILE = _PROJECT_ROOT / "logs" / "ai_edt.log"
+
+
+def _resolve_log_path() -> Path:
+    """Read the log file path from settings.yaml (or fall back to default)."""
+    settings_path = _PROJECT_ROOT / "config" / "settings.yaml"
+    try:
+        with settings_path.open("r", encoding="utf-8") as f:
+            settings: dict[str, Any] = yaml.safe_load(f) or {}
+        rel = settings.get("paths", {}).get("log_file", "logs/ai_edt.log")
+    except (OSError, yaml.YAMLError):
+        rel = "logs/ai_edt.log"
+    return _PROJECT_ROOT / rel
+
+
+_LOG_FILE = _resolve_log_path()
 
 _configured = False
 

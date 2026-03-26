@@ -27,6 +27,10 @@ no_pass:
   - union accepts
   - union rejects
   - union votes
+  # Routine completed operations — never a signal-generating event
+  - on schedule
+  - as scheduled
+  - delivery completes
   # Analyst commentary and market forecasts — not actionable events
   - analysts forecast
   - analysts expect
@@ -37,6 +41,19 @@ no_pass:
   - outlook unchanged
   - market stable
   - supply balanced
+  # Corporate financial calendar — routine disclosures, never supply-chain events
+  - quarterly dividend
+  - within expectations
+  - annual dividend
+  - quarterly earnings
+  - reports earnings
+  - reports revenue
+  - quarterly results
+  # Non-event corporate communications
+  - sustainability report
+  - annual report
+  - investor day
+  - investor presentation
 
 high_alpha:
   # Geopolitical supply chokepoints
@@ -45,13 +62,21 @@ high_alpha:
   - hormuz
   - suez
   - heavy crude
+  - heavy sour
   - iran
   - houthi
   - red sea
   - opec
   - malacca
   - yemen
+  - libya
   - cape of good hope
+  - panama canal
+  - caspian
+  - ras tanura
+  - fujairah        # Major UAE oil storage/export hub
+  - wti             # WTI-Brent spread events always refinery-relevant
+  - keystone        # Major Canadian crude pipeline; rupture/shutdown always significant
   # Supply disruptions — always trade-relevant, no LLM judgment needed
   - explosion
   - exploded
@@ -63,6 +88,13 @@ high_alpha:
   - blast
   - pipeline rupture
   - pipeline leak
+  - drone strike
+  - loading suspended
+  # Crude pricing mechanisms — direct margin impact on refiners
+  - official selling price
+  - osp
+  - strategic petroleum reserve
+  - petroleum reserve
   # Shipping rate events — explicit market data always worth analysing
   - vlcc
   - aframax
@@ -80,5 +112,8 @@ general:
   - bpd
   - fleet
   - vessel
-  - fleet
-  - vessel
+  - brent       # Crude benchmark; sieve filters out price opinions
+  - cushing     # Cushing, Oklahoma storage hub
+  - ngl         # Natural gas liquids — midstream/fractionation events
+  - lpg         # Liquefied petroleum gas — PSX/fractionation relevant
+  - pipeline    # General pipeline events (not Keystone-specific)

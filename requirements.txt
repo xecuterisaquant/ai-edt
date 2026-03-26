@@ -9,3 +9,7 @@ pyyaml>=6.0
 
 # Environment variable support (.env files)
 python-dotenv>=1.0.0
+
+# Google Gemini API (Stage 3 reasoning provider)
+# Uses the official google-genai SDK (successor to google-generativeai)
+google-genai>=1.0.0

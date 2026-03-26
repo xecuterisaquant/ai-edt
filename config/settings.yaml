@@ -4,21 +4,36 @@
 # Both models use keep_alive: 0 to unload after inference, preventing VRAM
 # collisions between the 1B sieve and 8B reasoning engine.
 
+# ---- Reasoning provider ----
+# "gemini" : uses Google Gemini API (requires GEMINI_API_KEY env var)
+# "ollama" : uses local Ollama (requires `ollama serve` running)
+reasoning_provider: "gemini"
+
 ollama:
   host: "http://localhost:11434"
 
+gemini:
+  model: "gemini-2.5-flash"   # Flash: fastest, cheapest, exceeds DeepSeek-R1-8B quality
+
 models:
-  sieve: "llama3.2:1b"
-  reasoning: "deepseek-r1:8b"
+  sieve: "llama3.2:1b"        # Stage 2 sieve stays local (fast, cheap, no API cost)
+  reasoning: "deepseek-r1:8b" # Used only when reasoning_provider is "ollama"
 
 timeouts:
-  sieve: 30        # 1B model is fast; 30s detects failures without masking slowness
-  reasoning: 200   # 8B on 4 GB VRAM; raised to 200s to handle thermal throttling after consecutive calls
+  sieve: 30         # 1B model is fast; 30s detects failures without masking slowness
+  reasoning: 60     # Gemini Flash is sub-3s; 60s is generous headroom without stalling
 
 watcher:
-  poll_interval: 120  # Seconds between RSS feed polls
+  poll_interval: 120       # Seconds between RSS feed polls
+  market_hours_only: false  # Set true to skip polls outside US market hours (09:30-16:00 ET weekdays)
+  max_entries_per_feed: 50  # Warn if a single poll returns more entries than this
+
+signals:
+  min_confidence: 70   # Signals below this confidence are not written to the database
+  keep_jsonl_backup: false  # Set true to also append signals to signals.jsonl
 
 paths:
   knowledge_base: "data/market_knowledge.json"
   signal_log: "signals/signals.jsonl"
+  signal_db: "signals/signals.db"
   log_file: "logs/ai_edt.log"

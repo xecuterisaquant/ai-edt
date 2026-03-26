@@ -15,6 +15,15 @@ env/
 logs/*.log
 signals/*.jsonl
 
+# SQLite database and WAL files — stay local, never commit
+signals/*.db
+signals/*.db-shm
+signals/*.db-wal
+
+# Watcher runtime state — local only
+signals/seen_links.txt
+signals/watcher_health.json
+
 # IDE
 .vscode/
 .idea/
@@ -27,4 +36,6 @@ build/
 # pytest cache
 .pytest_cache/
 
+#folders
 data/
+docs/

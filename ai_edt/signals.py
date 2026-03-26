@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
+from ai_edt import db
 from ai_edt.config import get_config
 from ai_edt.logger import get_logger
 
@@ -32,19 +32,21 @@ _YES_RE = re.compile(r"\bYES\b", re.IGNORECASE)
 class Signal:
     headline: str
     ticker: str
-    direction: str    # "LONG" or "SHORT"
-    confidence: int   # 0–100
+    direction: str  # "LONG" or "SHORT"
+    confidence: int  # 0–100
     rationale: str
     timestamp: str = ""
+    feed_source: str = ""  # RSS feed or data source that generated this headline
+    event_id: str = ""  # shared across multi-order signals from same headline (Phase 9)
+    order_level: int = 2  # 1=first-order named entity, 2=indirect winner, 3=tertiary (Phase 9)
 
     def __post_init__(self) -> None:
         if not self.timestamp:
-            self.timestamp = datetime.now(timezone.utc).isoformat()
+            self.timestamp = datetime.now(UTC).isoformat()
 
     def __str__(self) -> str:
-        return (
-            f"{self.ticker} {self.direction} @ {self.confidence}% | {self.rationale}"
-        )
+        source = f" [{self.feed_source}]" if self.feed_source else ""
+        return f"{self.ticker} {self.direction} @ {self.confidence}%{source} | {self.rationale}"
 
 
 def strip_think(text: str) -> str:
@@ -61,7 +63,7 @@ def sieve_says_no(response: str) -> bool:
     return bool(_NO_RE.search(response)) and not bool(_YES_RE.search(response))
 
 
-def parse_signal(raw: str, headline: str) -> Optional[Signal]:
+def parse_signal(raw: str, headline: str) -> Signal | None:
     """Parse the reasoning engine's raw output into a Signal.
 
     Returns None and logs a warning if Ticker or Signal direction is missing.
@@ -90,13 +92,43 @@ def parse_signal(raw: str, headline: str) -> Optional[Signal]:
 
 
 def log_signal(signal: Signal) -> None:
-    """Append a Signal record to the JSONL history file."""
-    cfg = get_config()
-    cfg.signal_log_path.parent.mkdir(parents=True, exist_ok=True)
+    """Persist a Signal to the SQLite database.
 
-    record = asdict(signal)
-    with cfg.signal_log_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+    Two gates are applied before writing:
+    1. Confidence gate: signals below ``min_confidence`` are dropped.
+    2. Deduplication gate: same ticker+direction within a 30-minute window
+       is suppressed to prevent multi-feed burst duplicates.
+
+    When ``keep_jsonl_backup`` is enabled in settings.yaml the signal is
+    also appended to ``signals.jsonl`` for compatibility.
+    """
+    cfg = get_config()
+
+    if signal.confidence < cfg.min_confidence:
+        logger.debug(
+            "Signal below min_confidence (%d < %d), not logged: %s %s",
+            signal.confidence,
+            cfg.min_confidence,
+            signal.ticker,
+            signal.direction,
+        )
+        return
+
+    if db.is_duplicate(signal.ticker, signal.direction, window_minutes=30):
+        logger.debug(
+            "Duplicate signal suppressed (%s %s within 30-min window)",
+            signal.ticker,
+            signal.direction,
+        )
+        return
+
+    db.insert_signal(signal)
+
+    if cfg.keep_jsonl_backup:
+        cfg.signal_log_path.parent.mkdir(parents=True, exist_ok=True)
+        record = asdict(signal)
+        with cfg.signal_log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
 
     logger.debug(
         "Signal logged → %s %s @ %d%%",
@@ -104,3 +136,12 @@ def log_signal(signal: Signal) -> None:
         signal.direction,
         signal.confidence,
     )
+
+
+def is_duplicate_signal(new_signal: Signal, window_minutes: int = 30) -> bool:
+    """Return True if the same ticker+direction signal exists in the DB within *window_minutes*.
+
+    Delegates to the database for authoritative deduplication that survives
+    process restarts (unlike the previous in-memory list approach).
+    """
+    return db.is_duplicate(new_signal.ticker, new_signal.direction, window_minutes)
