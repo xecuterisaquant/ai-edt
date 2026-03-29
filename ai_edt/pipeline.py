@@ -207,6 +207,33 @@ _PIPELINE_HINTS = frozenset(
     }
 )
 
+# LNG / natural gas events — export terminal outages, liquefaction, regasification.
+_LNG_HINTS = frozenset(
+    {
+        "lng",
+        "liquefaction",
+        "regasification",
+        "fsru",
+        "freeport lng",
+        "sabine pass",
+        "henry hub",
+        "natural gas export",
+    }
+)
+
+# Oilfield services — drilling activity, rig utilisation.
+_OIL_SERVICES_HINTS = frozenset(
+    {
+        "rig count",
+        "drillship",
+        "offshore drilling",
+        "deepwater drilling",
+        "jack-up rig",
+        "frac spread",
+        "completion activity",
+    }
+)
+
 
 def _select_relevant_kb(headline_lower: str, knowledge: dict) -> dict:
     """Return the KB subset most relevant to this headline's sector.
@@ -219,8 +246,10 @@ def _select_relevant_kb(headline_lower: str, knowledge: dict) -> dict:
     has_shipping = any(h in headline_lower for h in _LOGISTICS_HINTS)
     has_refinery = any(h in headline_lower for h in _REFINERY_HINTS)
     has_pipeline = any(h in headline_lower for h in _PIPELINE_HINTS)
+    has_lng = any(h in headline_lower for h in _LNG_HINTS)
+    has_oil_services = any(h in headline_lower for h in _OIL_SERVICES_HINTS)
 
-    sector_hits = sum([has_shipping, has_refinery, has_pipeline])
+    sector_hits = sum([has_shipping, has_refinery, has_pipeline, has_lng, has_oil_services])
     if sector_hits != 1:
         return knowledge  # ambiguous / cross-sector / none → full KB
 
@@ -232,6 +261,12 @@ def _select_relevant_kb(headline_lower: str, knowledge: dict) -> dict:
     elif has_refinery:
         keep.add("refinery_data")
         logger.debug("S3 KB    | Sector filter: refinery")
+    elif has_lng:
+        keep.add("lng_data")
+        logger.debug("S3 KB    | Sector filter: lng")
+    elif has_oil_services:
+        keep.add("oilfield_services_data")
+        logger.debug("S3 KB    | Sector filter: oil_services")
     else:
         keep.add("midstream_data")
         logger.debug("S3 KB    | Sector filter: pipeline")

@@ -105,6 +105,14 @@ high_alpha:
   - tanker rate
   - shipping rate
 
+  # LNG / Natural Gas supply events — always trade-relevant
+  - lng facility explosion
+  - lng export ban
+  - freeport outage
+  - sabine pass outage
+  - lng liquefaction outage
+  - lng terminal fire
+
 general:
   - oil
   - tanker
@@ -117,3 +125,27 @@ general:
   - ngl         # Natural gas liquids — midstream/fractionation events
   - lpg         # Liquefied petroleum gas — PSX/fractionation relevant
   - pipeline    # General pipeline events (not Keystone-specific)
+
+  # LNG / Natural gas
+  - lng
+  - natural gas
+  - henry hub   # US nat gas price benchmark; export facilities read this
+  - liquefaction
+  - regasification
+  - fsru        # Floating Storage Regasification Unit — import terminal
+  - freeport lng
+  - sabine pass
+
+  # Oil services / drilling activity
+  - rig count
+  - drillship
+  - offshore drilling
+  - deepwater drilling
+  - jack-up rig
+  - frac spread
+  - completion activity
+
+  # US midstream
+  - permian takeaway
+  - gathering system
+  - fractionation
