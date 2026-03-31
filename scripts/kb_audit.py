@@ -61,6 +61,14 @@ _KNOWN_SECTIONS = frozenset(
     }
 )
 
+# Non-ticker sections that exist in the KB but are NOT lists of ticker profiles.
+# The auditor skips ticker-level field validation for these sections.
+_NON_TICKER_SECTIONS = frozenset(
+    {
+        "cross_sector_rules",
+    }
+)
+
 # Macro scenario date field must be parseable and not older than this many days.
 _MACRO_STALE_DAYS = 30
 
@@ -118,6 +126,10 @@ def audit_kb(kb: dict, *, strict: bool = False) -> list[Issue]:
     # --- Ticker entries ---
     for section, entries in kb.items():
         if section in ("kb_version", "kb_last_audit"):
+            continue
+        # Non-ticker sections (e.g. cross_sector_rules) have a different schema —
+        # skip ticker-level field validation for them entirely.
+        if section in _NON_TICKER_SECTIONS:
             continue
         if not isinstance(entries, list):
             issues.append(
