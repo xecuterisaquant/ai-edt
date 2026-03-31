@@ -113,8 +113,15 @@ _REASONING_PROMPT = """\
                             to absorb the higher feedstock cost?
    - Supply glut          → which refiner loses its feedstock cost advantage when
                             prices normalise?
+   - Refinery offline     → coastal USGC refinery outage cancels seaborne crude orders;
+     (USGC coastal)         VLCC fixtures on WAF-USGC and MEG-USGC routes fall.
+                            FRO or DHT SHORT as Signal 2-3 (confidence 65–78%).
+                            Does NOT apply to inland (WTI-pipeline-fed) refinery outages.
 
 4. Prefer tickers with the HIGHEST direct exposure to the identified effect.
+   For tanker signals, rank by: (a) % fleet traded spot, (b) vessel-class alignment
+   with the disrupted route. An Aframax-focused operator is NOT a primary beneficiary
+   of a Bab-el-Mandeb or Hormuz VLCC rerouting event — check cross_sector_rules.
 5. Use ONLY tickers that appear in the KNOWLEDGE BASE above.
 6. Each signal must have a DIFFERENT ticker — no duplicates.
 7. If fewer than 3 distinct indirect effects exist, output only the ones that are genuine.
@@ -250,7 +257,9 @@ def _select_relevant_kb(headline_lower: str, knowledge: dict) -> dict:
         return knowledge  # no sector match → full KB
 
     # Build union of all matched sectors plus upstream (always context-relevant).
-    keep: set[str] = {"upstream_data"}
+    # cross_sector_rules is always included — it teaches cross-sector mechanics
+    # (VLCC ranking for strait events, refinery outage → VLCC SHORT, etc.).
+    keep: set[str] = {"upstream_data", "cross_sector_rules"}
     if has_shipping:
         keep.add("shipping_data")
         logger.debug("S3 KB    | Sector filter: +shipping")
