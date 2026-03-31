@@ -28,6 +28,11 @@ from ai_edt.signals import Signal, log_signal, parse_multi_signal, sieve_says_no
 
 logger = get_logger("pipeline")
 
+# Flat cost estimate per Stage 3 Gemini reasoning call.
+# Based on Gemini 2.5 Flash pricing (~$0.075/1M input, ~$0.30/1M output).
+# ~1500 input tokens + ~300 output tokens ≈ $0.0002. Updated when pricing changes.
+_S3_GEMINI_COST_PER_CALL: float = 0.0002
+
 
 # ---------------------------------------------------------------------------
 # LLM dispatch — single provider-routing point for both S2 and S3
@@ -423,9 +428,11 @@ def analyze(headline: str, feed_source: str = "") -> list[Signal]:
         return []
 
     event_id = str(uuid.uuid4())
+    cost_per_signal = _S3_GEMINI_COST_PER_CALL / len(signals) if signals else 0.0
     for sig in signals:
         sig.feed_source = feed_source
         sig.event_id = event_id
+        sig.est_cost_usd = round(cost_per_signal, 6)
         log_signal(sig)
         logger.info(
             "S3 SIGNAL| %s %s @ %d%% | %s",

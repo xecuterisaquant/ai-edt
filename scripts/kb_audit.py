@@ -122,6 +122,22 @@ def audit_kb(kb: dict, *, strict: bool = False) -> list[Issue]:
         issues.append(_warn("Missing root field 'kb_last_audit' (e.g. \"2026-03-25\")"))
     elif not _DATE_RE.match(str(kb["kb_last_audit"])):
         issues.append(_err(f"'kb_last_audit' must be YYYY-MM-DD, got: {kb['kb_last_audit']!r}"))
+    else:
+        # Warn if the KB hasn't been audited in more than _MACRO_STALE_DAYS days.
+        try:
+            from datetime import date as _date
+
+            audit_date = _date.fromisoformat(str(kb["kb_last_audit"]))
+            age_days = (_date.today() - audit_date).days
+            if age_days > _MACRO_STALE_DAYS:
+                issues.append(
+                    _warn(
+                        f"'kb_last_audit' is {age_days} days old (>{_MACRO_STALE_DAYS}). "
+                        "Run a full audit and bump kb_version if you edited ticker profiles."
+                    )
+                )
+        except ValueError:
+            pass  # already caught by the regex check above)
 
     # --- Ticker entries ---
     for section, entries in kb.items():
@@ -130,6 +146,22 @@ def audit_kb(kb: dict, *, strict: bool = False) -> list[Issue]:
         # Non-ticker sections (e.g. cross_sector_rules) have a different schema —
         # skip ticker-level field validation for them entirely.
         if section in _NON_TICKER_SECTIONS:
+            # Validate cross_sector_rules entries have required structural fields.
+            if not isinstance(entries, list):
+                issues.append(
+                    _err(f"Section '{section}': expected a list, got {type(entries).__name__}")
+                )
+                continue
+            for i, rule in enumerate(entries):
+                if not isinstance(rule, dict):
+                    issues.append(_err(f"{section}[{i}]: expected a dict, got {type(rule).__name__}"))
+                    continue
+                if "rule_id" not in rule:
+                    issues.append(_err(f"{section}[{i}]: missing required field 'rule_id'"))
+                if "last_updated" not in rule:
+                    issues.append(_warn(f"{section}[{i}]: missing 'last_updated' field — add it when you edit this rule"))
+                elif not _DATE_RE.match(str(rule["last_updated"])):
+                    issues.append(_err(f"{section}[{i}]: 'last_updated' must be YYYY-MM-DD, got: {rule['last_updated']!r}"))
             continue
         if not isinstance(entries, list):
             issues.append(

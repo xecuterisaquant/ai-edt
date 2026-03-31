@@ -170,6 +170,10 @@ def start() -> None:
     feed_backoff: dict[str, float] = {}  # feed_name → current backoff seconds
     feed_backoff_until: dict[str, float] = {}  # feed_name → monotonic deadline
 
+    # Outcome backfill: run every N poll cycles to populate price_1h / price_24h columns.
+    _BACKFILL_INTERVAL = 10  # every 10 polls ≈ every 20 min at the default 120s interval
+    _poll_count = 0
+
     while not _shutdown:
         # Market-hours gate
         if cfg.market_hours_only and not _is_market_hours():
@@ -278,6 +282,19 @@ def start() -> None:
 
         # Write health heartbeat after each cycle
         _write_health(hp, feeds_ok, feeds_err, headlines_processed)
+
+        # Outcome backfill — populate price columns for signals old enough
+        # to have 1h / 24h window data.  Non-fatal: a warning is logged but
+        # the watcher keeps running.
+        _poll_count += 1
+        if _poll_count % _BACKFILL_INTERVAL == 0:
+            try:
+                from ai_edt.outcomes import backfill_outcomes  # noqa: PLC0415
+
+                backfill_outcomes(cfg.db_path)
+                logger.debug("Outcome backfill completed (poll #%d)", _poll_count)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Outcome backfill error: %s", exc)
 
         if not _shutdown:
             time.sleep(cfg.poll_interval)

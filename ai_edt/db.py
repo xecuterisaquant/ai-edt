@@ -129,7 +129,8 @@ CREATE TABLE IF NOT EXISTS signals (
     price_24h       REAL,
     outcome_pnl_1h  REAL,
     outcome_pnl_24h REAL,
-    outcome_note    TEXT
+    outcome_note    TEXT,
+    est_cost_usd    REAL
 );
 
 CREATE TABLE IF NOT EXISTS headlines_seen (
@@ -246,8 +247,8 @@ def insert_signal(signal: Signal) -> int:
     cur = get_db().execute(
         """INSERT INTO signals
                (event_id, headline, feed_source, ticker, direction,
-                confidence, order_level, rationale, created_utc)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                confidence, order_level, rationale, created_utc, est_cost_usd)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             signal.event_id,
             signal.headline,
@@ -258,6 +259,7 @@ def insert_signal(signal: Signal) -> int:
             signal.order_level,
             signal.rationale,
             signal.timestamp,
+            signal.est_cost_usd,
         ),
     )
     get_db().commit()

@@ -39,6 +39,7 @@ class Signal:
     feed_source: str = ""  # RSS feed or data source that generated this headline
     event_id: str = ""  # shared across multi-order signals from same headline (Phase 9)
     order_level: int = 2  # 1=first-order named entity, 2=indirect winner, 3=tertiary (Phase 9)
+    est_cost_usd: float | None = None  # estimated LLM cost for this analysis call
 
     def __post_init__(self) -> None:
         if not self.timestamp:

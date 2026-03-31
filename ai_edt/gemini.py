@@ -18,12 +18,15 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import time
 
 from ai_edt.logger import get_logger
 
 logger = get_logger("gemini")
-
+# Semaphore: cap concurrent Gemini API calls at 3 to avoid burst rate-limit
+# storms (e.g. OPEC announcement hitting all 4 feeds simultaneously).
+_API_SEMAPHORE = threading.Semaphore(3)
 # Lazy-initialised singleton — created once on first call.
 _client = None
 
@@ -98,6 +101,10 @@ def generate(prompt: str, model: str, timeout: int) -> str:
     client = _get_client()
     logger.debug("Gemini call | model=%s | timeout=%ds", model, timeout)
 
+    acquired = _API_SEMAPHORE.acquire(timeout=60)
+    if not acquired:
+        raise GeminiError("Gemini concurrency gate timed out — 3 calls already in-flight after 60s")
+
     try:
         return _call_api(client, model, prompt, timeout)
     except _genai_errors.ClientError as exc:
@@ -129,3 +136,5 @@ def generate(prompt: str, model: str, timeout: int) -> str:
         if "deadline" in err_str or "timeout" in err_str:
             raise GeminiError(f"Timed out after {timeout}s (model={model})") from None
         raise GeminiError(f"Unexpected error calling Gemini: {exc}") from exc
+    finally:
+        _API_SEMAPHORE.release()
