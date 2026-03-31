@@ -36,6 +36,5 @@ build/
 # pytest cache
 .pytest_cache/
 
-# KB data files (JSON) — commit these; only exclude DB runtime files
-# (signals/*.db is already excluded above)
-# data/ SQLite is unused — no exclusion needed here; allow all data/ contents
+#folders
+data/
