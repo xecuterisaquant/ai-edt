@@ -245,9 +245,9 @@ def start() -> None:
 
                     headlines_processed += 1
                     logger.info("[%s] New headline: %s", feed_name, title)
-                    signal = pipeline.analyze(title, feed_source=feed_name)
+                    signals = pipeline.analyze(title, feed_source=feed_name)
 
-                    if signal:
+                    for signal in signals:
                         logger.info(
                             ">>> SIGNAL: %s %s @ %d%% — %s",
                             signal.ticker,

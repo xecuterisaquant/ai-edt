@@ -372,8 +372,11 @@ def run_stress_test() -> None:
                 time.sleep(5)  # GPU cooldown — reduces thermal throttle timeouts
 
             stage1_passed = _stage1_would_pass(headline.lower())
-            signal = pipeline.analyze(headline)
+            signals = pipeline.analyze(headline)
             prev_entered_pipeline = stage1_passed
+
+            # Use the highest-confidence (first) signal for accuracy scoring.
+            signal = signals[0] if signals else None
 
             if signal:
                 _handle_signal(

@@ -15,6 +15,7 @@ This trades occasional false positives for zero missed signals.
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime
 
 from ai_edt import gemini as _gemini
@@ -23,7 +24,7 @@ from ai_edt.config import get_config
 from ai_edt.gemini import GeminiError
 from ai_edt.logger import get_logger
 from ai_edt.ollama import OllamaError
-from ai_edt.signals import Signal, log_signal, parse_signal, sieve_says_no
+from ai_edt.signals import Signal, log_signal, parse_multi_signal, sieve_says_no
 
 logger = get_logger("pipeline")
 
@@ -92,8 +93,10 @@ _REASONING_PROMPT = """\
 
 ### RULES — FOLLOW EXACTLY
 1. DO NOT pick any company or ticker directly named or implied in the headline.
-   That is a 1st-order trade. You are hunting for the INDIRECT winner OR loser.
-2. First decide direction — LONG or SHORT — by tracing the causal chain:
+   That is a 1st-order trade. You are hunting for INDIRECT winners OR losers.
+2. Identify up to 3 separate tickers affected through distinct causal chains.
+   Rank them by confidence, highest first.
+3. For each signal, decide direction — LONG or SHORT — by tracing the causal chain:
 
    LONG (2nd-order beneficiary):
    - Supply disruption    → competing refiners gain as the disrupted refinery's output
@@ -111,40 +114,29 @@ _REASONING_PROMPT = """\
    - Supply glut          → which refiner loses its feedstock cost advantage when
                             prices normalise?
 
-3. Prefer the ticker with the HIGHEST direct exposure to the identified effect.
-   A high-complexity refiner wins a heavy-crude feedstock event.
-   A tanker with 85% spot exposure wins AND loses hardest on rate events.
-4. Use ONLY tickers that appear in the KNOWLEDGE BASE above.
-5. If the effect is genuinely ambiguous, commit to the most probable direction.
+4. Prefer tickers with the HIGHEST direct exposure to the identified effect.
+5. Use ONLY tickers that appear in the KNOWLEDGE BASE above.
+6. Each signal must have a DIFFERENT ticker — no duplicates.
+7. If fewer than 3 distinct indirect effects exist, output only the ones that are genuine.
+   Do not force 3 signals if fewer exist.
 
-### WORKED EXAMPLE — LONG
+### WORKED EXAMPLE — MULTI-ORDER
 News: "US expands Chevron licence to drill in Venezuela"
   WRONG (1st-order): CVX — Chevron is directly named. Obvious. Not useful.
-  CORRECT (2nd-order LONG):
-    More Venezuelan heavy crude produced
-    → needs to move from Caribbean to US Gulf Coast
-    → Teekay's Aframax/Suezmax fleet specialises in exactly this regional route
-    → higher Aframax utilisation → higher day rates → TNK LONG
-    Also valid: PBF — cheaper heavy sour feedstock widens crack spread vs competitors.
-
-### WORKED EXAMPLE — SHORT
-News: "Global VLCC newbuild deliveries surge — 5% fleet growth this quarter"
-  WRONG (1st-order): any shipyard — not in the knowledge base.
-  CORRECT (2nd-order SHORT):
-    More VLCCs enter service → tanker supply increases relative to cargo demand
-    → charterers gain rate-setting power → VLCC spot day rates fall
-    → FRO's 85% spot exposure means earnings decline almost immediately → FRO SHORT
+  CORRECT multi-order output:
+    Signal 1: TNK  | LONG | 91% | More Venezuelan heavy crude produced needs Aframax shipping from Caribbean to US Gulf. Teekay's Aframax fleet is specifically sized for Venezuela's shallow-draft terminals and operates this exact route.
+    Signal 2: PBF  | LONG | 84% | Greater Venezuelan heavy sour supply widens the heavy-light crude price spread, reducing PBF's feedstock cost and expanding crack spreads. PBF's high coking capacity makes it the most direct refinery beneficiary of cheaper Venezuelan heavy sour crude.
 
 ### YOUR ANALYSIS
-Apply the same step-by-step causal-chain reasoning to the news event above.
-Think: what changes physically? Is it bullish or bearish for 2nd-order players?
-Pick the ONE ticker in the KNOWLEDGE BASE that captures it most directly.
+Apply step-by-step causal-chain reasoning to the news event above.
+Think: what changes physically? Which 2nd-order players win or lose, and in what order of directness?
 
-Output ONLY in this exact format (no preamble, no extra text):
-- Ticker: <symbol from KNOWLEDGE BASE>
-- Signal: <LONG or SHORT>
-- Confidence: <0-100>%
-- Rationale: <Exactly 2 sentences. Sentence 1: the causal chain (what physically changes and in which direction). Sentence 2: why THIS ticker captures it better than the alternatives.>
+Output ONLY in this exact format — one line per signal, no preamble, no extra text:
+Signal 1: <TICKER> | <LONG or SHORT> | <0-100>% | <Exactly 2 sentences: causal chain then why this ticker over alternatives.>
+Signal 2: <TICKER> | <LONG or SHORT> | <0-100>% | <Exactly 2 sentences: causal chain then why this ticker over alternatives.>
+Signal 3: <TICKER> | <LONG or SHORT> | <0-100>% | <Exactly 2 sentences: causal chain then why this ticker over alternatives.>
+
+Omit Signal 2 or Signal 3 lines entirely if fewer genuine indirect effects exist.
 """
 
 # ---------------------------------------------------------------------------
@@ -236,12 +228,16 @@ _OIL_SERVICES_HINTS = frozenset(
 
 
 def _select_relevant_kb(headline_lower: str, knowledge: dict) -> dict:
-    """Return the KB subset most relevant to this headline's sector.
+    """Return the KB subset most relevant to this headline's sector(s).
 
-    Returns the full KB when a headline matches multiple sectors or none,
-    ensuring no signal is missed due to over-filtering.
+    Returns the union of all matched sector sections plus upstream context.
+    When no sector is matched returns the full KB (safe default).
     Upstream context is always included because producers underlie all
     supply-chain events.
+
+    Multi-sector matches (e.g. a headline affecting both shipping and refining)
+    now return BOTH sections so Stage 3 has the full context to generate
+    multi-order signals across sectors.
     """
     has_shipping = any(h in headline_lower for h in _LOGISTICS_HINTS)
     has_refinery = any(h in headline_lower for h in _REFINERY_HINTS)
@@ -250,26 +246,26 @@ def _select_relevant_kb(headline_lower: str, knowledge: dict) -> dict:
     has_oil_services = any(h in headline_lower for h in _OIL_SERVICES_HINTS)
 
     sector_hits = sum([has_shipping, has_refinery, has_pipeline, has_lng, has_oil_services])
-    if sector_hits != 1:
-        return knowledge  # ambiguous / cross-sector / none → full KB
+    if sector_hits == 0:
+        return knowledge  # no sector match → full KB
 
-    # Single clear sector: keep that section + upstream (always context-relevant).
+    # Build union of all matched sectors plus upstream (always context-relevant).
     keep: set[str] = {"upstream_data"}
     if has_shipping:
         keep.add("shipping_data")
-        logger.debug("S3 KB    | Sector filter: shipping")
-    elif has_refinery:
+        logger.debug("S3 KB    | Sector filter: +shipping")
+    if has_refinery:
         keep.add("refinery_data")
-        logger.debug("S3 KB    | Sector filter: refinery")
-    elif has_lng:
+        logger.debug("S3 KB    | Sector filter: +refinery")
+    if has_lng:
         keep.add("lng_data")
-        logger.debug("S3 KB    | Sector filter: lng")
-    elif has_oil_services:
+        logger.debug("S3 KB    | Sector filter: +lng")
+    if has_oil_services:
         keep.add("oilfield_services_data")
-        logger.debug("S3 KB    | Sector filter: oil_services")
-    else:
+        logger.debug("S3 KB    | Sector filter: +oil_services")
+    if has_pipeline:
         keep.add("midstream_data")
-        logger.debug("S3 KB    | Sector filter: pipeline")
+        logger.debug("S3 KB    | Sector filter: +pipeline")
 
     return {k: v for k, v in knowledge.items() if k in keep}
 
@@ -303,15 +299,18 @@ def stage1_matches(headline_lower: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def analyze(headline: str, feed_source: str = "") -> Signal | None:
+def analyze(headline: str, feed_source: str = "") -> list[Signal]:
     """Run the 3-stage pipeline on a single news headline.
 
-    *feed_source* identifies the RSS feed or data source that produced this
-    headline.  It is stored with the signal for feed-quality analysis.
+    Returns a list of Signals (up to 3, ranked by confidence) if trade
+    opportunities are identified, or an empty list if the headline is
+    filtered out at Stage 1 or 2, or if Stage 3 returns no parseable signals.
 
-    Returns a Signal if a trade opportunity is identified, or None if the
-    headline is filtered out at Stage 1 or 2, or if Stage 3 returns a
-    malformed response.
+    All signals from the same headline share an ``event_id`` so DB consumers
+    can group multi-order outputs together.
+
+    *feed_source* identifies the RSS feed or data source that produced this
+    headline.  It is stored with every signal for feed-quality analysis.
     """
     cfg = get_config()
     headline_lower = headline.lower()
@@ -324,10 +323,10 @@ def analyze(headline: str, feed_source: str = "") -> Signal | None:
 
     if tier == "no_pass":
         logger.info("S1 BLOCK | Hard-no keyword matched  | %s", headline)
-        return None
+        return []
     if tier is None:
         logger.info("S1 SKIP  | No keywords matched      | %s", headline)
-        return None
+        return []
 
     vip_pass = tier == "vip"
 
@@ -354,7 +353,7 @@ def analyze(headline: str, feed_source: str = "") -> Signal | None:
 
             if sieve_says_no(sieve_response):
                 logger.info("S2 SKIP  | Sieve: not trade-relevant | %s", headline)
-                return None
+                return []
 
             logger.info("S2 PASS  | Sieve: trade-relevant      | %s", headline)
 
@@ -382,7 +381,7 @@ def analyze(headline: str, feed_source: str = "") -> Signal | None:
             knowledge = json.load(f)
     except FileNotFoundError:
         logger.error("Knowledge base not found at %s", cfg.knowledge_base_path)
-        return None
+        return []
 
     filtered_knowledge = _select_relevant_kb(headline_lower, knowledge)
 
@@ -408,19 +407,22 @@ def analyze(headline: str, feed_source: str = "") -> Signal | None:
         )
     except (OllamaError, GeminiError) as exc:
         logger.error("S3 ERROR | Reasoning engine failed: %s", exc)
-        return None
+        return []
 
-    signal = parse_signal(raw_response, headline)
-    if signal is None:
-        return None
+    signals = parse_multi_signal(raw_response, headline)
+    if not signals:
+        return []
 
-    signal.feed_source = feed_source
-    log_signal(signal)
-    logger.info(
-        "S3 SIGNAL| %s %s @ %d%% | %s",
-        signal.ticker,
-        signal.direction,
-        signal.confidence,
-        headline,
-    )
-    return signal
+    event_id = str(uuid.uuid4())
+    for sig in signals:
+        sig.feed_source = feed_source
+        sig.event_id = event_id
+        log_signal(sig)
+        logger.info(
+            "S3 SIGNAL| %s %s @ %d%% | %s",
+            sig.ticker,
+            sig.direction,
+            sig.confidence,
+            headline,
+        )
+    return signals

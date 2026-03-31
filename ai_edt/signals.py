@@ -66,29 +66,91 @@ def sieve_says_no(response: str) -> bool:
 def parse_signal(raw: str, headline: str) -> Signal | None:
     """Parse the reasoning engine's raw output into a Signal.
 
-    Returns None and logs a warning if Ticker or Signal direction is missing.
+    Supports both the legacy single-signal format and the new multi-signal
+    format by delegating to ``parse_multi_signal`` and returning the first
+    result (or None).
+
+    Kept for backward compatibility with existing tests and callers.
+    """
+    signals = parse_multi_signal(raw, headline)
+    return signals[0] if signals else None
+
+
+# ---------------------------------------------------------------------------
+# Multi-signal format:  "Signal N: TICKER | LONG|SHORT | NN% | Rationale..."
+# ---------------------------------------------------------------------------
+
+_MULTI_SIGNAL_RE = re.compile(
+    r"Signal\s+(?P<order>\d+)\s*:\s*"
+    r"(?P<ticker>[A-Z]{1,6})\s*\|\s*"
+    r"(?P<direction>LONG|SHORT)\s*\|\s*"
+    r"(?P<confidence>\d+)%?\s*\|\s*"
+    r"(?P<rationale>.+?)(?=\nSignal\s+\d+:|\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def parse_multi_signal(raw: str, headline: str) -> list[Signal]:
+    """Parse the S3 reasoning engine output into a list of up to 3 Signals.
+
+    Handles the new multi-order format::
+
+        Signal 1: FRO | LONG | 95% | Rationale...
+        Signal 2: TNK | LONG | 82% | Rationale...
+        Signal 3: INSW | LONG | 71% | Rationale...
+
+    Falls back to legacy single-signal format (``- Ticker: X``) if no
+    ``Signal N:`` lines are found, so old-format responses still parse.
+
+    Returns an empty list (and logs a warning) if neither format matches.
     """
     cleaned = strip_think(raw)
 
+    # Try new multi-signal format first.
+    matches = list(_MULTI_SIGNAL_RE.finditer(cleaned))
+    if matches:
+        signals: list[Signal] = []
+        seen_tickers: set[str] = set()
+        for m in matches[:3]:
+            ticker = m.group("ticker").upper().rstrip(".,;")
+            if ticker in seen_tickers:
+                continue  # enforce no-duplicate rule
+            seen_tickers.add(ticker)
+            signals.append(
+                Signal(
+                    headline=headline,
+                    ticker=ticker,
+                    direction=m.group("direction").upper(),
+                    confidence=int(m.group("confidence")),
+                    rationale=m.group("rationale").strip(),
+                    order_level=int(m.group("order")),
+                )
+            )
+        if signals:
+            return signals
+
+    # Fall back to legacy single-signal format.
     ticker_m = re.search(r"-?\s*Ticker:\s*(\S+)", cleaned)
     dir_m = re.search(r"-?\s*Signal:\s*(LONG|SHORT)", cleaned, re.IGNORECASE)
     conf_m = re.search(r"-?\s*Confidence:\s*(\d+)", cleaned)
     rat_m = re.search(r"-?\s*Rationale:\s*(.+?)(?:\n-?\s*\w+:|\Z)", cleaned, re.DOTALL)
 
-    if not ticker_m or not dir_m:
-        logger.warning(
-            "Malformed signal — missing Ticker or Signal field. Raw output (first 500 chars):\n%s",
-            raw[:500],
-        )
-        return None
+    if ticker_m and dir_m:
+        return [
+            Signal(
+                headline=headline,
+                ticker=ticker_m.group(1).upper().rstrip(".,;"),
+                direction=dir_m.group(1).upper(),
+                confidence=int(conf_m.group(1)) if conf_m else 0,
+                rationale=rat_m.group(1).strip() if rat_m else "",
+            )
+        ]
 
-    return Signal(
-        headline=headline,
-        ticker=ticker_m.group(1).upper().rstrip(".,;"),
-        direction=dir_m.group(1).upper(),
-        confidence=int(conf_m.group(1)) if conf_m else 0,
-        rationale=rat_m.group(1).strip() if rat_m else "",
+    logger.warning(
+        "Malformed signal — no recognisable format. Raw output (first 500 chars):\n%s",
+        raw[:500],
     )
+    return []
 
 
 def log_signal(signal: Signal) -> None:
@@ -101,6 +163,9 @@ def log_signal(signal: Signal) -> None:
 
     When ``keep_jsonl_backup`` is enabled in settings.yaml the signal is
     also appended to ``signals.jsonl`` for compatibility.
+
+    Also accepts ``list[Signal]`` for convenience — assigns a shared
+    ``event_id`` across all signals in the list before logging each one.
     """
     cfg = get_config()
 

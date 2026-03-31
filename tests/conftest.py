@@ -131,6 +131,33 @@ SIEVE_YES_RESPONSE = "YES"
 SIEVE_NO_RESPONSE = "NO"
 SIEVE_AMBIGUOUS_RESPONSE = "It is unclear from the headline alone."
 
+# Multi-order signal responses (Phase 5)
+VALID_MULTI_SIGNAL_RESPONSE = """\
+Signal 1: FRO | LONG | 95% | Red Sea rerouting forces VLCCs onto the Cape of Good Hope route, extending voyages and tightening effective fleet supply. FRO's 85% spot exposure makes it the most leveraged beneficiary of rising VLCC spot day rates.
+Signal 2: EURN | LONG | 80% | Suezmax vessels on trans-Atlantic routes face the same rerouting demand increase. EURN's combined VLCC and Suezmax fleet benefits across both vessel classes with partial time-charter income stabilising earnings.
+Signal 3: INSW | LONG | 70% | Diversified fleet captures upside across VLCC, Suezmax and Aframax rate movements simultaneously. No single vessel segment dominates, providing broad exposure to the shipping disruption.
+"""
+
+VALID_MULTI_SIGNAL_WITH_THINK = """\
+<think>
+Let me trace the causal chains from multiple angles.
+Rerouting around Cape → longer routes → fewer effective VLCCs available.
+</think>
+Signal 1: FRO | LONG | 95% | Rerouting extends voyage duration, removing effective VLCC capacity from the market. FRO has the highest spot exposure at 85%, meaning earnings re-price almost immediately.
+Signal 2: DHT | LONG | 78% | Pure-play VLCC operator benefits from the same rate spike. DHT's smaller fleet means less diversification risk relative to its direct VLCC rate exposure.
+"""
+
+VALID_MULTI_SIGNAL_TWO_ONLY = """\
+Signal 1: PBF | LONG | 92% | Motiva outage removes competing heavy sour refining capacity from PADD 3, widening crack spreads across all Gulf Coast refiners. PBF's high coking capacity and heavy sour feedstock configuration make it the most direct beneficiary of reduced Motiva competition.
+Signal 2: VLO | LONG | 81% | As the largest independent Gulf Coast refiner by throughput, Valero absorbs the highest absolute volume of displaced refined product demand. VLO outperforms PBF on scale when the outage affects generic Gulf Coast crack spreads.
+"""
+
+MULTI_SIGNAL_DUPLICATE_TICKER = """\
+Signal 1: FRO | LONG | 95% | Causal chain A. FRO is most exposed.
+Signal 2: FRO | LONG | 85% | Duplicate ticker should be ignored.
+Signal 3: EURN | LONG | 70% | Causal chain B. EURN is secondary.
+"""
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
