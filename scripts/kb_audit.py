@@ -52,12 +52,18 @@ _OPTIONAL_BUT_AUDITED = frozenset({"last_verified"})
 _KNOWN_SECTIONS = frozenset(
     {
         "upstream_data",
+        "integrated_majors_data",
+        "trading_houses_data",
+        "midstream_data",
         "refinery_data",
         "shipping_data",
-        "midstream_data",
+        "broader_shipping_data",
+        "airline_data",
+        "agriculture_data",
+        "petrochemical_data",
         "lng_data",
         "oilfield_services_data",
-        "us_midstream_data",
+        "power_utilities_data",
     }
 )
 

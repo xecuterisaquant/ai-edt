@@ -36,7 +36,7 @@ _VALID_KB = {
 }
 
 _VALID_MACRO = {
-    "date": "March 2026",
+    "date": "April 2026",
     "situations": [
         {
             "theme": "Middle East Tension",

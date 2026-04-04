@@ -113,6 +113,33 @@ high_alpha:
   - lng liquefaction outage
   - lng terminal fire
 
+  # OPEC+ supply management — always trade-relevant
+  - opec+ cut
+  - production quota
+  - spare capacity
+  - opec+ increase
+  - production ceiling
+
+  # Chokepoint and tanker security — always trade-relevant
+  - bab el-mandeb
+  - bab-el-mandeb
+  - chokepoint
+  - tanker attack
+  - vessel seized
+  - tanker seized
+  - merchant vessel attacked
+
+  # Inventory extremes — always trade-relevant
+  - cushing stocks
+  - cushing inventory
+  - record low inventory
+  - record high inventory
+
+  # Weather disruption to infrastructure
+  - hurricane gulf
+  - gulf of mexico hurricane
+  - gulf hurricane
+
 general:
   - oil
   - tanker
@@ -149,3 +176,44 @@ general:
   - permian takeaway
   - gathering system
   - fractionation
+
+  # Aviation / airlines — jet fuel demand signal
+  - airline
+  - jet fuel
+  - aviation fuel
+  - air travel demand
+  - flight capacity
+  - widebody
+
+  # Agriculture / fertiliser — naphtha/gas demand signal
+  - fertiliser
+  - fertilizer
+  - ammonia
+  - urea
+  - potash
+  - nitrogen
+
+  # Petrochemicals — naphtha/ethane feedstock signal
+  - naphtha
+  - ethylene
+  - petrochemical
+  - cracker
+  - steam cracker
+  - chemical feedstock
+
+  # Broader shipping — container and product tanker signals
+  - container shipping
+  - port strike
+  - container rate
+  - box rate
+  - product tanker
+
+  # Market structure / spread signals
+  - crack spread
+  - refinery turnaround
+  - contango
+  - backwardation
+  - floating storage
+  - heating oil
+  - iron ore
+  - coal price

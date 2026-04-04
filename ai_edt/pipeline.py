@@ -122,6 +122,16 @@ _REASONING_PROMPT = """\
      (USGC coastal)         VLCC fixtures on WAF-USGC and MEG-USGC routes fall.
                             FRO or DHT SHORT as Signal 2-3 (confidence 65–78%).
                             Does NOT apply to inland (WTI-pipeline-fed) refinery outages.
+   - Oil price spike      → airlines with NO fuel hedging face immediate unit cost
+     (airlines)             increases. Rank by hedge exposure: WIZZ and CEA are unhedged
+                            (SHORT, highest confidence). IAG and RYA are heavily hedged
+                            12–18 months out (SHORT, low confidence, delay). Do NOT
+                            assume airlines are LONG in an oil demand-destruction
+                            scenario — recession destroys travel demand too.
+   - Oil price spike      → naphtha-fed petrochemical crackers face feedstock cost
+     (naphtha crackers)     increases. LOTTE (Korea), LYB and DOW European operations
+                            are naphtha-based — SHORT. LYB US operations use ethane
+                            (NOT naphtha) — UNAFFECTED. Check geography before signalling.
 
 4. Prefer tickers with the HIGHEST direct exposure to the identified effect.
    For tanker signals, rank by: (a) % fleet traded spot, (b) vessel-class alignment
@@ -131,6 +141,9 @@ _REASONING_PROMPT = """\
 6. Each signal must have a DIFFERENT ticker — no duplicates.
 7. If fewer than 3 distinct indirect effects exist, output only the ones that are genuine.
    Do not force 3 signals if fewer exist.
+8. For demand-destruction 2nd-order signals (airlines SHORT on oil spike, petrochemicals
+   SHORT on crude rally): cap confidence at 80%. An oil spike does NOT make airlines LONG —
+   recession that destroys oil demand also destroys travel demand simultaneously.
 
 ### WORKED EXAMPLE — MULTI-ORDER
 News: "US expands Chevron licence to drill in Venezuela"
@@ -238,6 +251,108 @@ _OIL_SERVICES_HINTS = frozenset(
     }
 )
 
+# Airlines / aviation — jet fuel demand signal.
+_AIRLINE_HINTS = frozenset(
+    {
+        "jet fuel",
+        "airline",
+        "aviation fuel",
+        "air travel",
+        "passenger demand",
+        "cargo flight",
+        "widebody",
+        "narrow body",
+        "wizz",
+        "ryanair",
+        "delta",
+        "united airlines",
+        "china eastern",
+    }
+)
+
+# Agriculture / fertiliser — naphtha and gas demand signal.
+_AGRICULTURE_HINTS = frozenset(
+    {
+        "fertiliser",
+        "fertilizer",
+        "ammonia",
+        "urea",
+        "potash",
+        "nitrogen fertiliser",
+        "crop",
+        "grain",
+        "black sea grain",
+        "ukraine grain",
+        "agricultural",
+    }
+)
+
+# Petrochemicals — naphtha/ethane feedstock signal.
+_PETROCHEMICAL_HINTS = frozenset(
+    {
+        "naphtha",
+        "ethylene",
+        "petrochemical",
+        "cracker",
+        "steam cracker",
+        "polyethylene",
+        "polypropylene",
+        "naphtha cracker",
+        "chemical feedstock",
+    }
+)
+
+# Power utilities — gas-fired generation demand signal.
+_POWER_HINTS = frozenset(
+    {
+        "power generation",
+        "electricity price",
+        "gas-fired",
+        "wind turbine",
+        "power switching",
+        "sse",
+    }
+)
+
+# Trading houses / diversified commodities.
+_TRADING_HOUSE_HINTS = frozenset(
+    {
+        "commodity trading",
+        "arbitrage",
+        "glencore",
+        "iron ore",
+        "coal price",
+        "copper price",
+    }
+)
+
+# Broader container shipping / product tankers — separate from VLCC/crude.
+_BROADER_SHIPPING_HINTS = frozenset(
+    {
+        "container shipping",
+        "port strike",
+        "maersk",
+        "container rate",
+        "box rate",
+        "cosco",
+        "zim",
+        "hafnia",
+    }
+)
+
+# Integrated oil majors — multi-geography, upstream+downstream combined.
+_INTEGRATED_MAJOR_HINTS = frozenset(
+    {
+        "shell",
+        "bp ",
+        "totalenergies",
+        "tte",
+        "shel",
+        "integrated major",
+        "oil major",
+    }
+)
+
 
 def _select_relevant_kb(headline_lower: str, knowledge: dict) -> dict:
     """Return the KB subset most relevant to this headline's sector(s).
@@ -256,8 +371,30 @@ def _select_relevant_kb(headline_lower: str, knowledge: dict) -> dict:
     has_pipeline = any(h in headline_lower for h in _PIPELINE_HINTS)
     has_lng = any(h in headline_lower for h in _LNG_HINTS)
     has_oil_services = any(h in headline_lower for h in _OIL_SERVICES_HINTS)
+    has_airline = any(h in headline_lower for h in _AIRLINE_HINTS)
+    has_agriculture = any(h in headline_lower for h in _AGRICULTURE_HINTS)
+    has_petrochemical = any(h in headline_lower for h in _PETROCHEMICAL_HINTS)
+    has_power = any(h in headline_lower for h in _POWER_HINTS)
+    has_trading_house = any(h in headline_lower for h in _TRADING_HOUSE_HINTS)
+    has_broader_shipping = any(h in headline_lower for h in _BROADER_SHIPPING_HINTS)
+    has_integrated_major = any(h in headline_lower for h in _INTEGRATED_MAJOR_HINTS)
 
-    sector_hits = sum([has_shipping, has_refinery, has_pipeline, has_lng, has_oil_services])
+    sector_hits = sum(
+        [
+            has_shipping,
+            has_refinery,
+            has_pipeline,
+            has_lng,
+            has_oil_services,
+            has_airline,
+            has_agriculture,
+            has_petrochemical,
+            has_power,
+            has_trading_house,
+            has_broader_shipping,
+            has_integrated_major,
+        ]
+    )
     if sector_hits == 0:
         return knowledge  # no sector match → full KB
 
@@ -280,6 +417,27 @@ def _select_relevant_kb(headline_lower: str, knowledge: dict) -> dict:
     if has_pipeline:
         keep.add("midstream_data")
         logger.debug("S3 KB    | Sector filter: +pipeline")
+    if has_airline:
+        keep.add("airline_data")
+        logger.debug("S3 KB    | Sector filter: +airline")
+    if has_agriculture:
+        keep.add("agriculture_data")
+        logger.debug("S3 KB    | Sector filter: +agriculture")
+    if has_petrochemical:
+        keep.add("petrochemical_data")
+        logger.debug("S3 KB    | Sector filter: +petrochemical")
+    if has_power:
+        keep.add("power_utilities_data")
+        logger.debug("S3 KB    | Sector filter: +power")
+    if has_trading_house:
+        keep.add("trading_houses_data")
+        logger.debug("S3 KB    | Sector filter: +trading_house")
+    if has_broader_shipping:
+        keep.add("broader_shipping_data")
+        logger.debug("S3 KB    | Sector filter: +broader_shipping")
+    if has_integrated_major:
+        keep.add("integrated_majors_data")
+        logger.debug("S3 KB    | Sector filter: +integrated_major")
 
     return {k: v for k, v in knowledge.items() if k in keep}
 
