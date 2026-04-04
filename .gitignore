@@ -39,3 +39,6 @@ build/
 #folders
 data/
 docs/
+
+# KB builder script — contains full proprietary ticker/sector data, never commit
+scripts/build_kb_v2.py
