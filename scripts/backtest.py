@@ -228,7 +228,7 @@ def performance_report(
     cutoff = (datetime.now(UTC) - timedelta(days=since_days)).isoformat()
     query = """
         SELECT ticker, direction, confidence, outcome_pnl_1h, outcome_pnl_24h,
-               headline, created_utc
+               outcome_pnl_3d, outcome_pnl_7d, headline, created_utc
         FROM signals
         WHERE price_at_signal IS NOT NULL
           AND outcome_pnl_24h IS NOT NULL
@@ -258,17 +258,28 @@ def performance_report(
     total = len(rows)
     pnl_1h_vals = [r["outcome_pnl_1h"] for r in rows if r["outcome_pnl_1h"] is not None]
     pnl_24h_vals = [r["outcome_pnl_24h"] for r in rows]
+    pnl_3d_vals = [r["outcome_pnl_3d"] for r in rows if r["outcome_pnl_3d"] is not None]
+    pnl_7d_vals = [r["outcome_pnl_7d"] for r in rows if r["outcome_pnl_7d"] is not None]
 
-    wins_24h = sum(1 for p in pnl_24h_vals if p > 0)
-    losses_24h = sum(1 for p in pnl_24h_vals if p < 0)
-    flat_24h = total - wins_24h - losses_24h
+    # Use the longest available horizon as primary metric.
+    primary_label = "7d" if pnl_7d_vals else ("3d" if pnl_3d_vals else "24h")
+    primary_vals = pnl_7d_vals or pnl_3d_vals or pnl_24h_vals
+    primary_total = len(primary_vals)
 
-    avg_pnl_24h = sum(pnl_24h_vals) / len(pnl_24h_vals) if pnl_24h_vals else 0.0
+    wins = sum(1 for p in primary_vals if p > 0)
+    losses = sum(1 for p in primary_vals if p < 0)
+    flat = primary_total - wins - losses
+
     avg_pnl_1h = sum(pnl_1h_vals) / len(pnl_1h_vals) if pnl_1h_vals else 0.0
+    avg_pnl_24h = sum(pnl_24h_vals) / len(pnl_24h_vals) if pnl_24h_vals else 0.0
+    avg_pnl_3d = sum(pnl_3d_vals) / len(pnl_3d_vals) if pnl_3d_vals else 0.0
+    avg_pnl_7d = sum(pnl_7d_vals) / len(pnl_7d_vals) if pnl_7d_vals else 0.0
 
     # ------------------------------------------------------------------ #
-    # Confidence calibration buckets
+    # Confidence calibration buckets — use primary horizon
     # ------------------------------------------------------------------ #
+    # Build a mapping of confidence bucket → list of primary-horizon PnL.
+    # For each signal we pick the best available horizon: 7d > 3d > 24h.
     buckets: dict[str, list[float]] = defaultdict(list)
     for r in rows:
         c = r["confidence"]
@@ -282,21 +293,27 @@ def performance_report(
             label = "60-69%"
         else:
             label = "<60%"
-        buckets[label].append(r["outcome_pnl_24h"])
+        pnl = r["outcome_pnl_7d"] or r["outcome_pnl_3d"] or r["outcome_pnl_24h"]
+        if pnl is not None:
+            buckets[label].append(pnl)
 
     # ------------------------------------------------------------------ #
-    # Per-ticker breakdown
+    # Per-ticker breakdown — use primary horizon
     # ------------------------------------------------------------------ #
     by_ticker: dict[str, list[float]] = defaultdict(list)
     for r in rows:
-        by_ticker[r["ticker"]].append(r["outcome_pnl_24h"])
+        pnl = r["outcome_pnl_7d"] or r["outcome_pnl_3d"] or r["outcome_pnl_24h"]
+        if pnl is not None:
+            by_ticker[r["ticker"]].append(pnl)
 
     # ------------------------------------------------------------------ #
-    # Direction breakdown
+    # Direction breakdown — use primary horizon
     # ------------------------------------------------------------------ #
     by_dir: dict[str, list[float]] = defaultdict(list)
     for r in rows:
-        by_dir[r["direction"]].append(r["outcome_pnl_24h"])
+        pnl = r["outcome_pnl_7d"] or r["outcome_pnl_3d"] or r["outcome_pnl_24h"]
+        if pnl is not None:
+            by_dir[r["direction"]].append(pnl)
 
     # ------------------------------------------------------------------ #
     # Print
@@ -313,13 +330,17 @@ def performance_report(
 
     print(f"\n{'OVERALL':}")
     print(f"  Signals with outcomes : {total}")
-    print(f"  Win / Loss / Flat (24h): {wins_24h} / {losses_24h} / {flat_24h}")
-    win_rate = wins_24h / total * 100 if total else 0
-    print(f"  Win rate (24h)         : {win_rate:.1f}%")
+    print(f"  Win / Loss / Flat ({primary_label}): {wins} / {losses} / {flat}")
+    win_rate = wins / primary_total * 100 if primary_total else 0
+    print(f"  Win rate ({primary_label})          : {win_rate:.1f}%")
     print(f"  Avg PnL 1h             : {avg_pnl_1h:+.3%}")
     print(f"  Avg PnL 24h            : {avg_pnl_24h:+.3%}")
+    if pnl_3d_vals:
+        print(f"  Avg PnL 3d  (n={len(pnl_3d_vals):>3})   : {avg_pnl_3d:+.3%}")
+    if pnl_7d_vals:
+        print(f"  Avg PnL 7d  (n={len(pnl_7d_vals):>3})   : {avg_pnl_7d:+.3%}")
 
-    print(f"\n{'CONFIDENCE CALIBRATION (24h win rate)':}")
+    print(f"\n{'CONFIDENCE CALIBRATION (' + primary_label + ' win rate)':}")
     bucket_order = ["90-100%", "80-89%", "70-79%", "60-69%", "<60%"]
     for label in bucket_order:
         vals = buckets.get(label)
@@ -329,7 +350,7 @@ def performance_report(
         avg = sum(vals) / len(vals)
         print(f"  {label:8s}  n={len(vals):3d}  win={wr:5.1f}%  avg={avg:+.3%}")
 
-    print(f"\n{'DIRECTION BREAKDOWN (24h)':}")
+    print(f"\n{'DIRECTION BREAKDOWN (' + primary_label + ')':}")
     for direction in ("LONG", "SHORT"):
         vals = by_dir.get(direction, [])
         if not vals:
@@ -338,7 +359,7 @@ def performance_report(
         avg = sum(vals) / len(vals)
         print(f"  {direction:5s}  n={len(vals):3d}  win={wr:5.1f}%  avg={avg:+.3%}")
 
-    print(f"\n{'PER-TICKER BREAKDOWN (24h, sorted by n)':}")
+    print(f"\n{'PER-TICKER BREAKDOWN (' + primary_label + ', sorted by n)':}")
     sorted_tickers = sorted(by_ticker.items(), key=lambda kv: -len(kv[1]))
     print(f"  {'Ticker':<8} {'n':>4} {'Win%':>7} {'Avg PnL':>10}")
     print(f"  {'-'*7} {'-'*4} {'-'*7} {'-'*10}")

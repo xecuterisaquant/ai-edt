@@ -70,21 +70,43 @@ def _make_yf_mock(
     *,
     base_dt: datetime = _BASE_DT,
     tz: str | None = "UTC",
+    daily_prices: list[float] | None = None,
 ) -> MagicMock:
-    """Return a yfinance module mock whose Ticker.history() yields a tidy DataFrame."""
+    """Return a yfinance module mock whose Ticker.history() yields a tidy DataFrame.
+
+    When ``daily_prices`` is provided, the mock returns different DataFrames
+    depending on the ``interval`` kwarg: "1h" gets the hourly data, "1d"
+    gets the daily data.  Otherwise all calls get the hourly data.
+    """
     if prices is None:
         prices = _PRICES
 
-    idx = pd.date_range(
+    idx_1h = pd.date_range(
         start=base_dt - timedelta(hours=2),
         periods=len(prices),
         freq="1h",
         tz=tz,
     )
-    hist_df = pd.DataFrame({"Close": prices}, index=idx)
+    hist_1h = pd.DataFrame({"Close": prices}, index=idx_1h)
+
+    if daily_prices is not None:
+        idx_d = pd.date_range(
+            start=base_dt - timedelta(days=1),
+            periods=len(daily_prices),
+            freq="1D",
+            tz=tz,
+        )
+        hist_d = pd.DataFrame({"Close": daily_prices}, index=idx_d)
+    else:
+        hist_d = hist_1h  # fallback
+
+    def _history_side_effect(**kwargs):
+        if kwargs.get("interval") == "1d" and daily_prices is not None:
+            return hist_d
+        return hist_1h
 
     mock_ticker = MagicMock()
-    mock_ticker.history.return_value = hist_df
+    mock_ticker.history.side_effect = _history_side_effect
 
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
@@ -245,3 +267,59 @@ class TestFetchPricesForSignal:
 
         assert result["price_at_signal"] is not None
         assert result["outcome_note"] is None
+
+    # ---------------------------------------------------------------
+    # Multi-day outcome windows (3d / 7d)
+    # ---------------------------------------------------------------
+
+    def test_3d_7d_prices_filled_when_elapsed(self) -> None:
+        """When 8+ days have elapsed, price_3d and price_7d should be populated."""
+        # daily_prices: day -1 through day +8 (10 bars)
+        daily = [100.0, 103.0, 105.0, 107.0, 110.0, 108.0, 106.0, 104.0, 112.0, 115.0]
+        mock_yf = _make_yf_mock(daily_prices=daily)
+        now = _BASE_DT + timedelta(days=9)
+
+        result = fetch_prices_for_signal("FRO", "LONG", _BASE_DT.isoformat(), now=now, _yf=mock_yf)
+
+        assert result["price_at_signal"] is not None
+        assert result["price_3d"] is not None
+        assert result["price_7d"] is not None
+        assert result["outcome_pnl_3d"] is not None
+        assert result["outcome_pnl_7d"] is not None
+
+    def test_3d_pnl_calculated_correctly(self) -> None:
+        """price_3d PnL should match hand-calculated value."""
+        # day -1=100, day 0=103 (entry), day 1=105, day 2=107, day 3=110, ...
+        daily = [100.0, 103.0, 105.0, 107.0, 110.0, 108.0, 106.0, 104.0, 112.0, 115.0]
+        mock_yf = _make_yf_mock(daily_prices=daily)
+        now = _BASE_DT + timedelta(days=9)
+
+        result = fetch_prices_for_signal("FRO", "LONG", _BASE_DT.isoformat(), now=now, _yf=mock_yf)
+
+        # Entry = 103.0 (price_at_signal from 1h), 3d bar = day index 4 = 110.0
+        p0 = result["price_at_signal"]
+        assert p0 == pytest.approx(103.0)
+        expected_3d = round((110.0 - 103.0) / 103.0, 6)
+        assert result["outcome_pnl_3d"] == pytest.approx(expected_3d, rel=1e-4)
+
+    def test_7d_not_available_before_7_days(self) -> None:
+        """price_7d must be None when only 5 days have elapsed."""
+        daily = [100.0, 103.0, 105.0, 107.0, 110.0, 108.0, 106.0]
+        mock_yf = _make_yf_mock(daily_prices=daily)
+        now = _BASE_DT + timedelta(days=5)
+
+        result = fetch_prices_for_signal("FRO", "LONG", _BASE_DT.isoformat(), now=now, _yf=mock_yf)
+
+        assert result["price_3d"] is not None
+        assert result["price_7d"] is None
+        assert result["outcome_pnl_7d"] is None
+
+    def test_3d_not_available_before_3_days(self) -> None:
+        """price_3d must be None when only 2 days have elapsed."""
+        mock_yf = _make_yf_mock()
+        now = _BASE_DT + timedelta(days=2)
+
+        result = fetch_prices_for_signal("FRO", "LONG", _BASE_DT.isoformat(), now=now, _yf=mock_yf)
+
+        assert result["price_3d"] is None
+        assert result["outcome_pnl_3d"] is None

@@ -372,8 +372,12 @@ class TestOutcomeOperations:
                 "price_1h": 15.5,
                 "price_4h": 16.0,
                 "price_24h": 16.5,
+                "price_3d": 17.0,
+                "price_7d": 17.5,
                 "outcome_pnl_1h": 0.033,
                 "outcome_pnl_24h": 0.1,
+                "outcome_pnl_3d": 0.133,
+                "outcome_pnl_7d": 0.167,
                 "outcome_note": None,
             },
         )

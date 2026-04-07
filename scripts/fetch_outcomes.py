@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--max-age-days",
         type=int,
-        default=7,
+        default=14,
         dest="max_age_days",
         help="Max signal age in days — older signals are excluded.",
     )
@@ -117,8 +117,11 @@ def main(argv: list[str] | None = None) -> int:
                 p0_str = f"  entry=${p0:.2f}" if p0 is not None else ""
                 p24_str = f"  exit_24h=${p24:.2f}" if p24 is not None else ""
                 pnl_str = f"  pnl_24h={pnl24:+.2%}" if pnl24 is not None else ""
+                pnl7d = prices.get("outcome_pnl_7d")
+                pnl7d_str = f"  pnl_7d={pnl7d:+.2%}" if pnl7d is not None else ""
                 print(
-                    f"  [{row['id']:>5}] {ticker} {direction}  {ts}  \u2713{p0_str}{p24_str}{pnl_str}"
+                    f"  [{row['id']:>5}] {ticker} {direction}  {ts}"
+                    f"  \u2713{p0_str}{p24_str}{pnl_str}{pnl7d_str}"
                 )
             elif status == "signal_too_recent":
                 counts["skipped"] += 1

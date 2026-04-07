@@ -218,8 +218,12 @@ def _seed_signal_with_outcome(mock_config, ticker, direction, confidence, pnl_1h
             "price_1h": 10.00 * (1 + pnl_1h),
             "price_4h": 10.00 * (1 + pnl_1h),
             "price_24h": 10.00 * (1 + pnl_24h),
+            "price_3d": None,
+            "price_7d": None,
             "outcome_pnl_1h": pnl_1h,
             "outcome_pnl_24h": pnl_24h,
+            "outcome_pnl_3d": None,
+            "outcome_pnl_7d": None,
             "outcome_note": "test",
         },
     )

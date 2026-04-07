@@ -12,6 +12,7 @@ with an in-memory or tmp-path SQLite connection.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import re
 import sqlite3
@@ -127,8 +128,12 @@ CREATE TABLE IF NOT EXISTS signals (
     price_1h        REAL,
     price_4h        REAL,
     price_24h       REAL,
+    price_3d        REAL,
+    price_7d        REAL,
     outcome_pnl_1h  REAL,
     outcome_pnl_24h REAL,
+    outcome_pnl_3d  REAL,
+    outcome_pnl_7d  REAL,
     outcome_note    TEXT,
     est_cost_usd    REAL
 );
@@ -174,6 +179,15 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(_SCHEMA)
+    # Non-destructive migration: add columns that may not exist yet.
+    for col, typ in [
+        ("price_3d", "REAL"),
+        ("price_7d", "REAL"),
+        ("outcome_pnl_3d", "REAL"),
+        ("outcome_pnl_7d", "REAL"),
+    ]:
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(f"ALTER TABLE signals ADD COLUMN {col} {typ}")
     conn.commit()
     return conn
 
@@ -346,11 +360,28 @@ def update_signal_prices(signal_id: int, prices: dict) -> None:
                    price_1h        = :price_1h,
                    price_4h        = :price_4h,
                    price_24h       = :price_24h,
+                   price_3d        = :price_3d,
+                   price_7d        = :price_7d,
                    outcome_pnl_1h  = :outcome_pnl_1h,
                    outcome_pnl_24h = :outcome_pnl_24h,
+                   outcome_pnl_3d  = :outcome_pnl_3d,
+                   outcome_pnl_7d  = :outcome_pnl_7d,
                    outcome_note    = :outcome_note
            WHERE id = :id""",
-        {**prices, "id": signal_id},
+        {
+            "price_at_signal": prices.get("price_at_signal"),
+            "price_1h": prices.get("price_1h"),
+            "price_4h": prices.get("price_4h"),
+            "price_24h": prices.get("price_24h"),
+            "price_3d": prices.get("price_3d"),
+            "price_7d": prices.get("price_7d"),
+            "outcome_pnl_1h": prices.get("outcome_pnl_1h"),
+            "outcome_pnl_24h": prices.get("outcome_pnl_24h"),
+            "outcome_pnl_3d": prices.get("outcome_pnl_3d"),
+            "outcome_pnl_7d": prices.get("outcome_pnl_7d"),
+            "outcome_note": prices.get("outcome_note"),
+            "id": signal_id,
+        },
     )
     get_db().commit()
 
@@ -374,7 +405,9 @@ def get_signals_needing_outcomes(
                WHERE (price_at_signal IS NULL
                       OR price_1h IS NULL
                       OR price_4h IS NULL
-                      OR price_24h IS NULL)
+                      OR price_24h IS NULL
+                      OR price_3d IS NULL
+                      OR price_7d IS NULL)
                  AND created_utc <= :min_cutoff
                  AND created_utc >= :max_cutoff
                ORDER BY created_utc DESC""",
